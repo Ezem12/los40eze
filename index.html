@@ -100,6 +100,22 @@ ul,ol{margin:0;padding:0;list-style:none}
 .podium{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.88rem;color:var(--muted)}
 .podium b{color:var(--cream);font-weight:600}
 .g-foot{text-align:center;font-size:.85rem}
+.back{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;background:rgba(10,20,48,.6);border:1.5px solid var(--line);color:var(--cream);border-radius:99px;padding:9px 16px;
+  font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:.85rem;cursor:pointer}
+.back:hover{border-color:var(--gold)}
+.menu{display:flex;flex-direction:column;gap:10px}
+.menu-item{width:100%;display:flex;align-items:center;gap:14px;text-align:left;background:linear-gradient(180deg,rgba(29,58,124,.55),rgba(18,36,90,.55));border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;cursor:pointer;color:var(--cream)}
+.menu-item:hover{border-color:var(--gold)}
+.menu-item.pending{border-color:rgba(246,199,68,.6);box-shadow:0 0 0 1px rgba(246,199,68,.2)}
+.menu-item .ic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;background:var(--mustard);color:var(--ink);flex:none;font-family:var(--label);font-weight:700}
+.menu-item.trivia .ic{background:var(--sky)}
+.menu-item.done .ic{background:rgba(127,211,154,.22);color:var(--ok)}
+.menu-item.closed .ic{background:rgba(246,199,68,.16);color:var(--gold)}
+.menu-item .tx{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.menu-item .tt{font-family:var(--display);font-size:1.18rem;line-height:1.15;overflow-wrap:anywhere}
+.menu-item .st{font-size:.88rem;color:var(--muted);overflow-wrap:anywhere}
+.menu-item.pending .st{color:var(--gold)}
+.menu-item .go{font-size:1.7rem;color:var(--gold);flex:none;line-height:1}
 .demo-note{text-align:center;font-size:.85rem;color:var(--gold)}
 
 /* trivia */
@@ -333,7 +349,9 @@ function armed(b,label){ if(b.dataset.armed) return true; b.dataset.armed='1'; c
    ========================================================= */
 function guestView(app){
   app.className='guest';
-  let nick=lsGet('f40-nick'); let ms=null, epoch=0, lastSig='', fails=0, timer=null, play=null, qsCache=null;
+  let nick=lsGet('f40-nick'); let ms=null, epoch=0, lastSig='', fails=0, timer=null, play=null, qsCache=null, view=null;
+  const go=id=>{ view=id; if(id){ try{ history.pushState({f40:id},'') }catch(e){} } render(true); app.scrollIntoView?.({block:'start'}); window.scrollTo?.(0,0); };
+  window.addEventListener('popstate',()=>{ if(play) return; if(view){ view=null; render(true); } });
   const header=compact=>`<header class="g-head${compact?' compact':''}"><div class="stars" aria-hidden="true"><i>★</i><i class="big">★</i><i>★</i></div>
     <h1 class="marquee">Los 40<br>del Eze</h1><div class="ribbon">Sábado 17 · Simonah</div></header>`;
   const demoNote=()=>store.kind==='demo'?'<p class="demo-note">Modo ensayo: solo se sincroniza dentro de este navegador.</p>':'';
@@ -357,7 +375,7 @@ function guestView(app){
     app.innerHTML=`<div id="net" class="net" hidden>Sin señal… reintentando</div>${header(true)}
       <p class="hello">¡Hola, ${esc(nick)}!</p><main id="g-main" class="stack"><div class="card empty"><p class="muted">Conectando…</p></div></main>
       <p class="g-foot muted">¿No sos ${esc(nick)}? <button class="linkbtn" id="chg">Cambiar nombre</button></p>${demoNote()}`;
-    $('#chg').onclick=()=>{ lsDel('f40-nick'); nick=null; lastSig=''; play=null; renderJoin(); };
+    $('#chg').onclick=()=>{ lsDel('f40-nick'); nick=null; lastSig=''; play=null; view=null; renderJoin(); };
     store.update('players/'+DEV,{nick,t:Date.now()}).catch(()=>{});
     lastSig=''; poll();
   }
@@ -372,24 +390,44 @@ function guestView(app){
     timer=setTimeout(poll,fails?Math.min(10000,3500*fails):3500);
   }
   function render(force){
-    const v=myVotes(), t=myTrivia(); const sig=JSON.stringify([ms,v,t,epoch]);
+    const v=myVotes(), t=myTrivia(); const sig=JSON.stringify([ms,v,t,epoch,view]);
     if(!force&&sig===lastSig) return; lastSig=sig;
     const main=$('#g-main'); if(!main) return;
     const keep={}; main.querySelectorAll('input.inp').forEach(i=>keep[i.id]=i.value); const focused=document.activeElement?.id;
     const list=momentList(ms);
     const open=list.filter(m=>m.status==='open').sort((a,b)=>(b.openedAt||0)-(a.openedAt||0));
     const closed=list.filter(m=>m.status==='closed').sort((a,b)=>(b.closedAt||0)-(a.closedAt||0));
+    if(view && !ms?.[view]) view=null;
     let h='';
-    if(!open.length) h+=`<section class="card empty"><p class="big">¡A bailar!</p><p class="muted">Ahora no hay juegos abiertos. Cuando arranque el próximo aparece acá solo, sin recargar.</p></section>`;
-    else{ h+=`<p class="sec-title">Abiertos ahora</p>`; for(const m of open) h+= m.type==='trivia'?triviaCard(m,t):voteCard(m,v); }
-    if(closed.length){ h+=`<p class="sec-title">Ganadores de la noche</p>`; for(const m of closed) h+=winnerCard(m); }
+    if(view){
+      const m={id:view,...ms[view]};
+      h+=`<button class="back" id="back">← Volver al menú</button>`;
+      if(m.status==='open') h+= m.type==='trivia'?triviaCard(m,t):voteCard(m,v);
+      else if(m.status==='closed') h+=winnerCard(m);
+      else h+=`<section class="card empty"><p class="big">Ya viene</p><p class="muted">Este juego todavía no arrancó.</p></section>`;
+    } else {
+      if(!open.length) h+=`<section class="card empty"><p class="big">¡A bailar!</p><p class="muted">Ahora no hay juegos abiertos. Cuando arranque el próximo aparece acá solo, sin recargar.</p></section>`;
+      else{ const pend=open.filter(m=>m.type==='trivia'?!t[m.id]:!v[m.id]).length;
+        h+=`<p class="sec-title">Juegos abiertos</p>${pend?`<p class="hint" style="text-align:center">Te ${pend===1?'falta 1 juego':'faltan '+pend+' juegos'}. Tocá uno para entrar.</p>`:''}<div class="menu">${open.map(m=>menuItem(m,v,t)).join('')}</div>`; }
+      if(closed.length) h+=`<p class="sec-title">Ganadores de la noche</p><div class="menu">${closed.map(m=>menuItem(m,v,t)).join('')}</div>`;
+    }
     main.innerHTML=h;
     for(const id in keep){ const el=document.getElementById(id); if(el) el.value=keep[id]; }
     if(focused){ const el=document.getElementById(focused); if(el) el.focus(); }
+    const bk=$('#back'); if(bk) bk.onclick=()=>{ view=null; render(true); window.scrollTo?.(0,0); };
+    main.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
     main.querySelectorAll('.cand').forEach(b=>b.addEventListener('click',onVote));
     main.querySelectorAll('form.nominate').forEach(f=>f.addEventListener('submit',onNominate));
     main.querySelectorAll('[data-self]').forEach(b=>b.addEventListener('click',onSelf));
     main.querySelectorAll('[data-play]').forEach(b=>b.addEventListener('click',()=>startTrivia(b.dataset.play)));
+  }
+  function menuItem(m,v,t){
+    let cls='', ic='★', st='';
+    if(m.status==='closed'){ cls='closed'; ic='🏆'; st='Ganó: '+esc(m.winner?.name||'—'); }
+    else if(m.type==='trivia'){ cls='trivia'; ic='?'; const d=t[m.id]; if(d){ cls+=' done'; ic='✓'; st=`Ya jugaste · ${d.pts} puntos`; } else { cls+=' pending'; st='Jugá la trivia'; } }
+    else { const cs=candList(m); const mine=v[m.id]; const c=cs.find(x=>x.id===mine);
+      if(c){ cls='done'; ic='✓'; st='Votaste a '+esc(c.name); } else { cls='pending'; st= cs.length?`${cs.length} ${cs.length===1?'candidato':'candidatos'} · votá o postulá`:'Postulá al primero'; } }
+    return `<button class="menu-item ${cls}" data-go="${esc(m.id)}"><span class="ic" aria-hidden="true">${ic}</span><span class="tx"><span class="tt">${esc(m.title)}</span><span class="st">${st}</span></span><span class="go" aria-hidden="true">›</span></button>`;
   }
   function voteCard(m,v){
     const cs=candList(m); const mine=v[m.id]; const iAmIn=cs.some(c=>norm(c.name)===norm(nick));
@@ -408,7 +446,7 @@ function guestView(app){
     const done=t[m.id];
     return `<section class="card mom"><div class="stack" style="gap:6px"><span><span class="badge open">Trivia abierta</span></span><h3>${esc(m.title)}</h3>${m.desc?`<p class="muted">${esc(m.desc)}</p>`:''}</div>
       ${done?`<div class="score"><span class="lbl">Tu puntaje</span><span class="big">${done.pts}</span><p class="muted">Acertaste ${done.ok} de ${done.n}. El ganador sale cuando se cierre.</p></div>`
-        :`<p class="muted">Preguntas sobre el cumpleañero. Cuanto más rápido respondés, más puntos sumás. Se juega una sola vez.</p>
+        :`<p class="muted">Preguntas sobre el cumpleañero. Cuanto más rápido respondés, más puntos sumás. Se juega una sola vez: si salís a mitad, la pregunta en curso cuenta como no respondida.</p>
           <button class="btn" data-play="${esc(m.id)}">Jugar la trivia</button><p class="err" id="e-${esc(m.id)}" hidden></p>`}</section>`;
   }
   function winnerCard(m){
@@ -449,7 +487,7 @@ function guestView(app){
     while(play.i<qs.length && answers[qs[play.i].id]) play.i++;
     if(play.i>=qs.length) return finishTrivia();
     const q=qs[play.i]; const T=(Number(q.time)||20)*1000; const t0=performance.now(); let raf=null, done=false;
-    main.innerHTML=`<section class="card tq"><div class="meta"><span class="lbl">${esc(ms?.[play.mid]?.title||'Trivia')}</span><span class="pill gold">${play.i+1} de ${qs.length}</span></div>
+    main.innerHTML=`<button class="back" id="tback">← Salir al menú</button><section class="card tq"><div class="meta"><span class="lbl">${esc(ms?.[play.mid]?.title||'Trivia')}</span><span class="pill gold">${play.i+1} de ${qs.length}</span></div>
       <h2>${esc(q.q)}</h2><div class="tbar"><span id="tb"></span></div>
       <div class="opts">${[0,1,2,3].map(i=>`<button class="opt o${i}" data-i="${i}"><span class="sh">${SHAPES[i]}</span>${esc(q.opts?.[i]||'—')}</button>`).join('')}</div>
       <p class="muted" id="tmsg" style="text-align:center">Más rápido, más puntos.</p></section>`;
@@ -460,10 +498,12 @@ function guestView(app){
       btns.forEach((b,i)=>{ b.disabled=true; if(i===Number(q.correct)) b.classList.add('right'); else if(i===a) b.classList.add('wrong'); else b.classList.add('dim'); });
       const p=points(q,rec); $('#tmsg').textContent= a==null?'¡Se terminó el tiempo!': p>0?`¡Bien! +${p} puntos`:'Nop, era la marcada en verde.';
       play.answers[q.id]=rec; store.set(`tanswers/${play.mid}/${DEV}/${q.id}`,rec).catch(()=>{ play.pending=true; });
-      setTimeout(()=>{ play.i++; nextQ(); },1600);
+      setTimeout(()=>{ if(!play) return; play.i++; nextQ(); },1600);
     };
     btns.forEach(b=>b.addEventListener('click',()=>answer(Number(b.dataset.i))));
-    const loop=()=>{ const left=Math.max(0,1-(performance.now()-t0)/T); tb.style.transform=`scaleX(${left})`; if(left<=0) return answer(null); raf=requestAnimationFrame(loop); }; loop();
+    $('#tback').onclick=()=>{ if(!done){ done=true; cancelAnimationFrame(raf); const rec={a:-1,ms:T+2000,by:nick}; play.answers[q.id]=rec; store.set(`tanswers/${play.mid}/${DEV}/${q.id}`,rec).catch(()=>{}); }
+      play=null; view=null; render(true); window.scrollTo?.(0,0); };
+    const loop=()=>{ if(done) return; const left=Math.max(0,1-(performance.now()-t0)/T); tb.style.transform=`scaleX(${left})`; if(left<=0) return answer(null); raf=requestAnimationFrame(loop); }; loop();
   }
   async function finishTrivia(){
     const {mid,qs,answers}=play; const byId=Object.fromEntries(qs.map(q=>[q.id,q]));
