@@ -246,10 +246,12 @@ function supaStore(base,key){
   // escribe un conjunto de cambios {ruta: valor|null} respetando la semántica de árbol
   async function apply(changes){
     const eqDel=[], likeDel=[], ups=[];
+    const structural=changes.some(([path])=>!/^(votes|tanswers|players|rev)(\/|$)/.test(path));
     for(const [path,v] of changes){
       if(!path){ eqDel.push(''); if(v&&typeof v==='object') for(const k in v) ups.push([k,v[k]]); continue; }
       likeDel.push(path); if(v==null) eqDel.push(path); else ups.push([path,v]);
     }
+    if(structural) ups.push(['rev',Date.now()]);
     await del(eqDel,likeDel); await upsert(ups);
   }
   return {
@@ -262,7 +264,7 @@ function supaStore(base,key){
     stream(p,cb,onStatus){
       let last='', stop=false, t=null;
       const tick=async()=>{ try{ const v=await this.get(p); onStatus&&onStatus(true); const j=JSON.stringify(v); if(j!==last){ last=j; cb(v); } }catch(e){ onStatus&&onStatus(false); }
-        if(!stop) t=setTimeout(tick,2000); };
+        if(!stop) t=setTimeout(tick,3000); };
       tick(); return ()=>{ stop=true; clearTimeout(t); };
     }
   };
@@ -379,12 +381,20 @@ function guestView(app){
     store.update('players/'+DEV,{nick,t:Date.now()}).catch(()=>{});
     lastSig=''; poll();
   }
+  let lastRev=null, polling=false;
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && nick && polling) poll(); });
   async function poll(){
-    clearTimeout(timer);
+    clearTimeout(timer); polling=true;
+    if(document.hidden) return; // celular bloqueado o pestaña en segundo plano: no gasta datos
     try{
-      let [m,meta]=await store.multi(['moments','meta']);
-      if(!meta){ await seed(); meta=await store.get('meta'); }
-      fails=0; const n=$('#net'); if(n) n.hidden=true; ms=m||{}; epoch=meta?.epoch||0;
+      let need=true;
+      if(store.kind==='supabase' && ms!==null){ const r=await store.get('rev'); need=(r!==lastRev); if(need) lastRev=r; }
+      if(need){
+        let [m,meta,r]=await store.multi(['moments','meta','rev']);
+        if(!meta){ await seed(); meta=await store.get('meta'); }
+        if(lastRev===null) lastRev=r; ms=m||{}; epoch=meta?.epoch||0;
+      }
+      fails=0; const n=$('#net'); if(n) n.hidden=true;
       if(!play) render();
     }catch(e){ fails++; const n=$('#net'); if(n) n.hidden=fails<2; }
     timer=setTimeout(poll,fails?Math.min(10000,3500*fails):3500);
