@@ -393,13 +393,19 @@ function guestView(app){
       <p class="g-foot muted">¿No sos ${esc(nick)}? <button class="linkbtn" id="chg">Cambiar nombre</button></p>${demoNote()}`;
     $('#chg').onclick=()=>{ lsDel('f40-nick'); nick=null; lastSig=''; play=null; view=null; renderJoin(); };
     store.update('players/'+DEV,{nick,t:Date.now()}).catch(()=>{});
-    lastSig=''; poll();
+    lastSig=''; busy=false; poll();
+    setTimeout(()=>{ if(ms===null){ const m=$('#g-main'); if(m) m.innerHTML=`<div class="card empty"><p class="big">Está tardando…</p><p class="muted">Puede ser la señal. Seguimos intentando solos, o tocá el botón.</p><button class="btn" id="retry">Reintentar</button></div>`; const r=$('#retry'); if(r) r.onclick=()=>location.reload(); } },8000);
   }
-  let lastRev=null, polling=false;
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && nick && polling) poll(); });
+  let lastRev=null, polling=false, busy=false;
+  const wake=()=>{ if(nick && polling && !document.hidden) poll(); };
+  document.addEventListener('visibilitychange',wake);
+  ['focus','pageshow','online'].forEach(ev=>window.addEventListener(ev,wake));
   async function poll(){
     clearTimeout(timer); polling=true;
-    if(document.hidden) return; // celular bloqueado o pestaña en segundo plano: no gasta datos
+    if(busy){ timer=setTimeout(poll,1500); return; }
+    // celular bloqueado o en otra app: consulta mucho menos, pero nunca se detiene
+    if(document.hidden && ms!==null){ timer=setTimeout(poll,15000); return; }
+    busy=true;
     try{
       let need=true;
       if(store.kind==='supabase' && ms!==null){ const r=await store.get('rev'); need=(r!==lastRev); if(need) lastRev=r; }
@@ -411,6 +417,7 @@ function guestView(app){
       fails=0; const n=$('#net'); if(n) n.hidden=true;
       if(!play) render();
     }catch(e){ fails++; const n=$('#net'); if(n) n.hidden=fails<2; }
+    busy=false;
     timer=setTimeout(poll,fails?Math.min(10000,3500*fails):3500);
   }
   function render(force){
