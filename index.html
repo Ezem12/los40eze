@@ -388,6 +388,7 @@ function guestView(app){
   }
   function start(){
     app.innerHTML=`<div id="net" class="net" hidden>Sin señal… reintentando</div>${header(true)}
+      ${ssGet('f40-pin')==='ok' && !app.closest('.sim') ? '<a class="back" href="#admin" style="align-self:center">⚙ Volver al panel</a>' : ''}
       <p class="hello">¡Hola, ${esc(nick)}!</p><main id="g-main" class="stack"><div class="card empty"><p class="muted">Conectando…</p></div></main>
       <p class="g-foot muted">¿No sos ${esc(nick)}? <button class="linkbtn" id="chg">Cambiar nombre</button></p>${demoNote()}`;
     $('#chg').onclick=()=>{ lsDel('f40-nick'); nick=null; lastSig=''; play=null; view=null; renderJoin(); };
@@ -557,7 +558,7 @@ function adminView(app){
   function render(){
     const players=Object.keys(root?.players||{}).length;
     const tabs=[['momentos','Momentos'],['trivia','Preguntas trivia'],['ajustes','Link y ajustes']];
-    app.innerHTML=`<div class="a-top"><h1>Panel · Los 40</h1><div class="row">${connPill()}<span class="pill">${players} ${players===1?'invitado':'invitados'}</span></div></div>
+    app.innerHTML=`<div class="a-top"><h1>Panel · Los 40</h1><div class="row">${connPill()}<span class="pill">${players} ${players===1?'invitado':'invitados'}</span>${app.closest('.sim')?'':'<a class="btn sky small" href="#jugar">🎉 Jugar como invitado</a>'}</div></div>
       <nav class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${tab===k}" data-act="tab" data-v="${k}">${l}</button>`).join('')}</nav>
       <div id="tabbody">${tab==='trivia'?triviaHTML():tab==='ajustes'?ajustesHTML():momentosHTML()}</div>`;
   }
@@ -747,6 +748,7 @@ function route(){
   const h=(location.hash||'').replace('#',''); const app=$('#app');
   if(h==='admin') adminView(app);
   else if(h==='ensayo'||(store.kind==='demo'&&!h)) simView(app);
+  else if(h==='jugar') guestView(app);
   else guestView(app);
 }
 window.addEventListener('hashchange',()=>location.reload());
